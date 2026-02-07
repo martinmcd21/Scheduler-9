@@ -4515,7 +4515,9 @@ def main() -> None:
                     # Mark email as read after successful invite
                     email_id = email_data.get("id", "")
                     if email_id:
-                        mark_email_read_imap(email_id)
+                        client = _make_graph_client()
+                        if client:
+                            client.mark_message_read(email_id)
                     return True
                 else:
                     st.error(f"Failed to send invite to {cand_email}: {result.error}")
