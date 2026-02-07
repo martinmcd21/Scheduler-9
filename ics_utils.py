@@ -178,9 +178,30 @@ class ICSInvite:
     url: str = ""
     uid: Optional[str] = None
     display_timezone: str = "UTC"
+
     def to_ics(self) -> bytes:
-    return self.to_bytes()
-    
+        return self.to_bytes()
+
+    def to_bytes(self) -> bytes:
+        required_attendees = [(e, e) for e in self.attendee_emails or []]
+        optional_attendees = []
+
+        return build_ics_invite(
+            organizer_email=self.organizer_email,
+            organizer_name=self.organizer_name,
+            required_attendees=required_attendees,
+            optional_attendees=optional_attendees,
+            summary=self.summary,
+            description=self.description,
+            dtstart_utc=self.dtstart_utc,
+            dtend_utc=self.dtend_utc,
+            location=self.location,
+            url=self.url,
+            uid=self.uid,
+            method="REQUEST",
+            status="CONFIRMED",
+            sequence=0,
+        )    
     def to_bytes(self) -> bytes:
         required_attendees = [(e, e) for e in self.attendee_emails or []]
         optional_attendees = []
