@@ -177,6 +177,7 @@ class ICSInvite:
     location: str = ""
     url: str = ""
     uid: Optional[str] = None
+    display_timezone: str = "UTC"    
 
     def to_bytes(self) -> bytes:
         required_attendees = [(e, e) for e in self.attendee_emails or []]
