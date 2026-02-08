@@ -4621,10 +4621,6 @@ def main() -> None:
 
         def _format_candidates_display(interview_row: Dict[str, Any]) -> str:
             """Format candidate display for table, handling multi-candidate interviews."""
-    email_id = (email_data or {}).get("id", "")
-    if email_id and has_processed_message(email_id, action="invite_sent"):
-        log_action("Invite already sent (dedupe)", "Skipping duplicate auto-send", status="success")
-        return False
 
             candidates_json = interview_row.get("candidates_json")
             if candidates_json:
