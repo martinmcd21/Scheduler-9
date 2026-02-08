@@ -4518,7 +4518,7 @@ def main() -> None:
                         client = _make_graph_client()
                         if client:
                             client.mark_message_read(email_id)
-    mark_message_processed(email_id, action="invite_sent")
+                        mark_message_processed(email_id, action="invite_sent")
                     return True
                 else:
                     st.error(f"Failed to send invite to {cand_email}: {result.error}")
