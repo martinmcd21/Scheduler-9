@@ -809,3 +809,32 @@ class AuditLog:
                 exc_info=True,
             )
             return False
+
+
+def has_processed_message(message_id: str, action: str = "invite_sent") -> bool:
+    """Check whether a message_id has already been processed for a given action."""
+    if not message_id:
+        return False
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT 1 FROM processed_messages WHERE message_id = ? AND action = ? LIMIT 1",
+        (message_id, action),
+    )
+    row = cur.fetchone()
+    conn.close()
+    return row is not None
+
+
+def mark_message_processed(message_id: str, action: str = "invite_sent") -> None:
+    """Mark a message_id as processed so it is never handled twice."""
+    if not message_id:
+        return
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT OR REPLACE INTO processed_messages (message_id, action, processed_utc) VALUES (?, ?, ?)",
+        (message_id, action, datetime.utcnow().isoformat()),
+    )
+    conn.commit()
+    conn.close()
