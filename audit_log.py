@@ -179,6 +179,18 @@ class AuditLog:
                     )
                     """
                 )
+
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS processed_messages (
+                        message_id TEXT NOT NULL,
+                        action TEXT NOT NULL,
+                        processed_utc TEXT NOT NULL,
+                        PRIMARY KEY (message_id, action)
+                    )
+                    """
+                )
+
                 conn.commit()
 
                 # Migration: Add candidate_timezone column if missing
