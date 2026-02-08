@@ -4532,6 +4532,11 @@ def main() -> None:
                     # Skip if already processed or already read
                     if email_id in st.session_state.auto_processed_emails:
                         continue
+                    # Persistent idempotency (across reruns)
+                    if has_processed_message(email_id, action="invite_sent"):
+                        st.session_state.auto_processed_emails.add(email_id)
+                        continue
+                        continue
                     if email_item.get("is_read"):
                         continue
 
@@ -4541,6 +4546,10 @@ def main() -> None:
 
                     if detected_choice:
                         cand_email = email_item.get("from", "")
+                        # Safety: ignore messages that originate from the scheduler mailbox itself
+                        if cand_email and cand_email.strip().lower() == (SCHEDULER_MAILBOX or "").strip().lower():
+                            st.session_state.auto_processed_emails.add(email_id)
+                            continue
                         slot_display = f"{detected_choice.get('date')} {detected_choice.get('start')}-{detected_choice.get('end')}"
 
                         # Try to send the invite
