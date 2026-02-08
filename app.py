@@ -4518,6 +4518,7 @@ def main() -> None:
                         client = _make_graph_client()
                         if client:
                             client.mark_message_read(email_id)
+        mark_message_processed(email_id, action="invite_sent")
                     return True
                 else:
                     st.error(f"Failed to send invite to {cand_email}: {result.error}")
@@ -4620,6 +4621,11 @@ def main() -> None:
 
         def _format_candidates_display(interview_row: Dict[str, Any]) -> str:
             """Format candidate display for table, handling multi-candidate interviews."""
+    email_id = (email_data or {}).get("id", "")
+    if email_id and has_processed_message(email_id, action="invite_sent"):
+        log_action("Invite already sent (dedupe)", "Skipping duplicate auto-send", status="success")
+        return False
+
             candidates_json = interview_row.get("candidates_json")
             if candidates_json:
                 try:
@@ -5334,7 +5340,6 @@ def _parse_availability_upload(upload, interviewer_timezone: Optional[str] = Non
     # De-duplicate slots by (date, start, end) tuple
     uniq = {(s["date"], s["start"], s["end"]): s for s in slots}
     return list(uniq.values())
-
 
 def _parse_single_interviewer_availability(interviewer_idx: int) -> None:
     """Parse availability for a single interviewer and recompute intersection."""
