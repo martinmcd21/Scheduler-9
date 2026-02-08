@@ -868,3 +868,41 @@ def get_connection() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=30000")
     return conn
+
+# ----------------------------
+# Dedupe helpers (auto-send safety)
+# ----------------------------
+_DEFAULT_DB_PATH = str(Path(__file__).with_name("audit_log.db"))
+
+def has_processed_message(message_id: str, action: str = "invite_sent") -> bool:
+    """Check whether a Graph message_id has already been processed."""
+    if not message_id:
+        return False
+
+    log = AuditLog(_DEFAULT_DB_PATH)
+    conn = log._connect()
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM processed_messages WHERE message_id = ? AND action = ? LIMIT 1",
+            (message_id, action),
+        ).fetchone()
+        return row is not None
+    finally:
+        conn.close()
+
+
+def mark_message_processed(message_id: str, action: str = "invite_sent") -> None:
+    """Mark a Graph message_id as processed so we never auto-send twice."""
+    if not message_id:
+        return
+
+    log = AuditLog(_DEFAULT_DB_PATH)
+    conn = log._connect()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO processed_messages (message_id, action, processed_utc) VALUES (?, ?, ?)",
+            (message_id, action, utc_now_iso()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
