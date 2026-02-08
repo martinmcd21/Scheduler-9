@@ -21,7 +21,7 @@ except Exception:
     OpenAI = None  # type: ignore
 
 from graph_client import GraphClient, GraphConfig, GraphAPIError, GraphAuthError
-from audit_log import AuditLog, LogLevel, log_structured, InterviewStatus
+from audit_log import AuditLog, InterviewStatus, LogLevel, has_processed_message, log_structured, mark_message_processed
 from ics_utils import ICSInvite, stable_uid, ICSValidationError, create_ics_from_interview, generate_cancellation_ics
 from timezone_utils import to_utc, from_utc, iso_utc, is_valid_timezone, safe_zoneinfo
 from export_utils import (
