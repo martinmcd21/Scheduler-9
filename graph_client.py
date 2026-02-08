@@ -445,7 +445,7 @@ class GraphClient:
             top: Maximum number of messages to fetch
             include_read: If True, fetches all recent messages (not just unread)
         """
-        url = f"{self.cfg.base_url}/users/{self.cfg.scheduler_mailbox}/messages"
+        url = f"{self.cfg.base_url}/users/{self.cfg.scheduler_mailbox}/mailFolders/Inbox/messages"
         params = {
             "$top": str(top),
             "$orderby": "receivedDateTime desc",
