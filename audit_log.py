@@ -838,3 +838,21 @@ def mark_message_processed(message_id: str, action: str = "invite_sent") -> None
     )
     conn.commit()
     conn.close()
+
+
+# ----------------------------
+# Compatibility DB Helpers (used by dedupe functions)
+# ----------------------------
+_DEFAULT_DB_PATH = Path(__file__).with_name("audit_log.db")
+
+def get_connection() -> sqlite3.Connection:
+    """Return a sqlite connection to the audit DB (used by dedupe helpers)."""
+    conn = sqlite3.connect(
+        str(_DEFAULT_DB_PATH),
+        timeout=30.0,
+        check_same_thread=False,
+    )
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
+    return conn
