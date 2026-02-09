@@ -14,6 +14,13 @@ import fitz  # PyMuPDF
 from PIL import Image
 import streamlit as st
 
+# Scheduler mailbox address (used to ignore self-sent emails)
+SCHEDULER_MAILBOX = (
+    st.secrets.get("SCHEDULER_MAILBOX")
+    if hasattr(st, "secrets") and "SCHEDULER_MAILBOX" in st.secrets
+    else "scheduler@powerdashhr.com"
+).strip().lower()
+
 # --- Optional OpenAI (kept for PDF parsing flow) ---
 try:
     from openai import OpenAI
