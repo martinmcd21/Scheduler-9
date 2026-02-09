@@ -260,6 +260,8 @@ class GraphClient:
         *,
         params: Dict[str, Any] | None = None,
         json_body: Any | None = None,
+        data: str | bytes | None = None,
+        headers_extra: Dict[str, str] | None = None,
         _retry_auth: bool = True,  # Internal flag to prevent infinite retry
     ) -> Tuple[int, Any]:
         """
@@ -269,9 +271,10 @@ class GraphClient:
             resp = requests.request(
                 method,
                 url,
-                headers=self._headers(),
+                headers={**self._headers(), **(headers_extra or {})},
                 params=params,
                 json=json_body,
+                data=data,
                 timeout=self.timeout_s,
             )
         except requests.exceptions.RequestException as e:
@@ -296,7 +299,7 @@ class GraphClient:
             )
             self._invalidate_token()
             self.get_token(force_refresh=True)
-            return self._request(method, url, params=params, json_body=json_body, _retry_auth=False)
+            return self._request(method, url, params=params, json_body=json_body, data=data, headers_extra=headers_extra, _retry_auth=False)
 
         if resp.status_code >= 400:
             # Extract error message from Graph response for better diagnostics
@@ -436,6 +439,89 @@ class GraphClient:
         return response_body or {"status": "sent"}
 
     @with_retry(max_attempts=3, base_delay_s=1.0)
+    
+    def send_mail_mime(
+        self,
+        *,
+        mime_message: bytes,
+        save_to_sent: bool = True,
+    ) -> None:
+        """Send a message using MIME format via Graph /sendMail.
+
+        Graph requires the request body to be a **base64-encoded** MIME message and
+        the request Content-Type to be `text/plain`.
+
+        This is the most reliable way to send RSVP-capable meeting requests
+        (text/calendar; method=REQUEST) via sendMail.
+        """
+        import base64
+
+        url = f"{self.cfg.base_url}/users/{self.cfg.scheduler_mailbox}/sendMail"
+        b64 = base64.b64encode(mime_message).decode("ascii")
+        # For MIME sendMail, Graph expects the base64 string as the raw request body.
+        self._request(
+            "POST",
+            url,
+            data=b64,
+            headers_extra={"Content-Type": "text/plain"},
+        )
+
+    def send_meeting_invite(
+        self,
+        *,
+        subject: str,
+        html_body: str,
+        ics_bytes: bytes,
+        to_recipients: list[str],
+        cc_recipients: list[str] | None = None,
+        organizer_name: str | None = None,
+        organizer_email: str | None = None,
+        save_to_sent: bool = True,
+    ) -> None:
+        """Send an RSVP-capable calendar invitation email via MIME.
+
+        Graph `sendMail` with JSON + `.ics` attachment is often rendered as a normal
+        attachment (no Accept/Decline UI) in Outlook. MIME lets us send a
+        `text/calendar; method=REQUEST` part that Outlook interprets as a meeting request.
+        """
+        from email.message import EmailMessage
+        from email.utils import formatdate, make_msgid
+
+        organizer_email = organizer_email or self.cfg.scheduler_mailbox
+        organizer_name = organizer_name or organizer_email
+
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = f"{organizer_name} <{organizer_email}>"
+        msg["To"] = ", ".join([r for r in to_recipients if r])
+        if cc_recipients:
+            msg["Cc"] = ", ".join([r for r in cc_recipients if r])
+        msg["Date"] = formatdate(localtime=False)
+        msg["Message-ID"] = make_msgid(domain=organizer_email.split("@")[-1])
+
+        # Human-readable content
+        msg.set_content(
+            "This message contains a calendar invitation. If your client doesn't show RSVP buttons, open the attached ICS."
+        )
+        msg.add_alternative(html_body, subtype="html")
+
+        # Calendar part for RSVP
+        cal_part = EmailMessage()
+        cal_part.set_content(
+            ics_bytes.decode("utf-8", errors="replace"),
+            subtype="calendar",
+            charset="utf-8",
+        )
+        cal_part.replace_header("Content-Type", "text/calendar; method=REQUEST; charset=utf-8")
+        cal_part.add_header("Content-Disposition", "inline", filename="invite.ics")
+
+        # Ensure root is multipart/mixed then attach calendar part
+        msg.make_mixed()
+        msg.attach(cal_part)
+
+        self.send_mail_mime(mime_message=msg.as_bytes(), save_to_sent=save_to_sent)
+
+
     def fetch_unread_messages(self, top: int = 50, include_read: bool = False) -> list[Dict[str, Any]]:
         """
         Fetch messages from the scheduler mailbox via Graph API.
