@@ -13,7 +13,21 @@ from typing import List, Dict, Any, Optional, Tuple
 import fitz  # PyMuPDF
 from PIL import Image
 import streamlit as st
+# ----------------------------
+# App constants / configuration
+# ----------------------------
 
+def _get_config_str(key: str, default: str) -> str:
+    """Read a config string from Streamlit secrets or env, with a safe fallback."""
+    try:
+        val = st.secrets.get(key)  # type: ignore[attr-defined]
+        if val is not None:
+            return str(val).strip()
+    except Exception:
+        pass
+    return os.getenv(key, default).strip()
+
+SCHEDULER_MAILBOX = _get_config_str("SCHEDULER_MAILBOX", "scheduler@powerdashhr.com").lower()
 # --- Optional OpenAI (kept for PDF parsing flow) ---
 try:
     from openai import OpenAI
