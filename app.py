@@ -4477,8 +4477,8 @@ def main() -> None:
             # Helper function to send invite for a detected slot
             def _send_invite_for_email(email_data: Dict[str, Any], detected_slot: Dict[str, str]) -> bool:
                 """Send calendar invite for a detected slot choice. Returns True on success."""
-                cand_email = email_data.get("from", "")
-
+                cand_email = interview.candidate_email
+                candidate_name = _ensure_candidate_name(interview.candidate_name, cand_email)
                 # Get current form values from session state (keys match form input keys)
                 hm_email = st.session_state.get("hm_email", "")
                 hm_name = st.session_state.get("hm_name", "")
@@ -4559,8 +4559,8 @@ def main() -> None:
                     detected_choice = detect_slot_choice_from_text(full_body, st.session_state.get("slots", []))
 
                     if detected_choice:
-                        cand_email = email_item.get("from", "")
-                        # Safety: ignore messages that originate from the scheduler mailbox itself
+                        cand_email = interview.candidate_email
+                        candidate_name = _ensure_candidate_name(interview.candidate_name, cand_email)                        # Safety: ignore messages that originate from the scheduler mailbox itself
                         if cand_email and cand_email.strip().lower() == (SCHEDULER_MAILBOX or "").strip().lower():
                             st.session_state.auto_processed_emails.add(email_id)
                             continue
