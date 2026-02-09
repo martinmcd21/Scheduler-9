@@ -3139,7 +3139,8 @@ def _build_ics(
     *,
     organizer_email: str,
     organizer_name: str,
-    attendee_emails: List[str],
+    required_attendees: List[Tuple[str, str]],
+    optional_attendees: Optional[List[Tuple[str, str]]],
     summary: str,
     description: str,
     dtstart_utc: datetime,
@@ -3149,21 +3150,46 @@ def _build_ics(
     uid_hint: str,
     display_timezone: str = "UTC",
 ) -> bytes:
-    uid = stable_uid(uid_hint, organizer_email, ",".join(attendee_emails), dtstart_utc.isoformat())
-    inv = ICSInvite(
-        uid=uid,
-        dtstart_utc=dtstart_utc,
-        dtend_utc=dtend_utc,
-        summary=summary,
-        description=description,
+    """Build an RFC 5545 meeting invite (ICS).
+
+    Important: Optional attendees (e.g., recruiter) must be included as ICS ATTENDEE
+    entries with ROLE=OPT-PARTICIPANT. Putting someone only in email CC does *not*
+    make them an optional attendee in the meeting.
+
+    Args:
+        organizer_email: Scheduler mailbox address.
+        organizer_name: Display name for organizer.
+        required_attendees: Required attendees as (email, name).
+        optional_attendees: Optional attendees as (email, name).
+        summary: Meeting subject.
+        description: Meeting description/agenda.
+        dtstart_utc: Start time in UTC.
+        dtend_utc: End time in UTC.
+        location: Location display string.
+        url: Join URL (Teams or other).
+        uid_hint: Stable seed for UID generation.
+        display_timezone: Used only for display elsewhere; not embedded in UTC ICS times.
+    """
+    # Keep UID stable across re-runs to avoid duplicate events in clients.
+    # Include all attendees in the UID seed so changes to attendee list produce a new UID.
+    required_emails = ",".join([e for (e, _) in (required_attendees or [])])
+    optional_emails = ",".join([e for (e, _) in (optional_attendees or [])]) if optional_attendees else ""
+    uid = stable_uid(uid_hint, organizer_email, required_emails, optional_emails, dtstart_utc.isoformat())
+
+    return create_ics_from_interview(
         organizer_email=organizer_email,
         organizer_name=organizer_name,
-        attendee_emails=attendee_emails,
+        attendees=required_attendees or [],
+        optional_attendees=optional_attendees or [],
+        summary=summary,
+        description=description,
+        start_utc=dtstart_utc,
+        end_utc=dtend_utc,
         location=location,
-        url=url,
-        display_timezone=display_timezone,
+        join_url=url,
+        uid_seed=uid,
+        sequence=0,
     )
-    return inv.to_ics()
 
 
 # ----------------------------
@@ -5990,7 +6016,8 @@ def _create_individual_invite(
     ics_bytes = _build_ics(
         organizer_email=organizer_email,
         organizer_name=organizer_name,
-        attendee_emails=[a[0] for a in attendees],
+        required_attendees=attendees,
+        optional_attendees=cc_attendees,
         summary=effective_subject,
         description=agenda,
         dtstart_utc=start_utc,
@@ -6169,7 +6196,7 @@ def _create_individual_invite(
                 attachment={
                     "name": "invite.ics",
                     "contentBytes": base64.b64encode(ics_bytes).decode("utf-8"),
-                    "contentType": "text/calendar",
+                    "contentType": "text/calendar; method=REQUEST",
                 },
             )
             log_structured(
@@ -6362,7 +6389,8 @@ def _create_group_invite(
     ics_bytes = _build_ics(
         organizer_email=organizer_email,
         organizer_name=organizer_name,
-        attendee_emails=[a[0] for a in attendees],
+        required_attendees=attendees,
+        optional_attendees=cc_attendees,
         summary=effective_subject,
         description=agenda,
         dtstart_utc=start_utc,
@@ -6533,7 +6561,7 @@ def _create_group_invite(
                 attachment={
                     "name": "invite.ics",
                     "contentBytes": base64.b64encode(ics_bytes).decode("utf-8"),
-                    "contentType": "text/calendar",
+                    "contentType": "text/calendar; method=REQUEST",
                 },
             )
             log_structured(
@@ -6714,7 +6742,8 @@ def _handle_create_invite(
     ics_bytes = _build_ics(
         organizer_email=organizer_email,
         organizer_name=organizer_name,
-        attendee_emails=[a[0] for a in attendees],
+        required_attendees=attendees,
+        optional_attendees=cc_attendees,
         summary=effective_subject,
         description=agenda,
         dtstart_utc=start_utc,
@@ -6781,7 +6810,8 @@ def _handle_create_invite(
             st.session_state["last_invite_ics_bytes"] = _build_ics(
                 organizer_email=organizer_email,
                 organizer_name=organizer_name,
-                attendee_emails=[a[0] for a in attendees],
+                required_attendees=attendees,
+                optional_attendees=cc_attendees,
                 summary=effective_subject,
                 description=agenda,
                 dtstart_utc=start_utc,
