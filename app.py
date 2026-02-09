@@ -80,6 +80,18 @@ class ValidationError(ValueError):
 # Maximum number of candidates allowed in a single batch
 MAX_CANDIDATES = 20
 
+def _extract_sender_address(email: Dict[str, Any]) -> str:
+    """Safely extract sender email address from Graph message."""
+    sender = email.get('from', '')
+    if isinstance(sender, dict):
+        return (
+            sender.get('emailAddress', {})
+            .get('address', '')
+            .strip()
+            .lower()
+        )
+    return str(sender).strip().lower()
+
 
 @dataclass
 class CandidateValidationResult:
@@ -4433,19 +4445,28 @@ def main() -> None:
             st.caption(f"Reading emails via {email_source} | Last fetched: {fetch_time}")
             # Filter out bounce messages if requested
             if hide_bounces:
-                filtered_emails = [
-                    e for e in emails
-                    if not (
-                        e.get("subject", "").lower().startswith("undeliverable") or
-                        "postmaster" in e.get("from", "").lower() or
-                        "mailer-daemon" in e.get("from", "").lower() or
-                        "microsoftexchange" in e.get("from", "").lower()
-                    )
-                ]
-                bounce_count = len(emails) - len(filtered_emails)
-                if bounce_count > 0:
-                    st.info(f"Hiding {bounce_count} bounce/undeliverable message(s)")
-                emails = filtered_emails
+    filtered_emails = []
+    for e in emails:
+        subject = str(e.get('subject', '')).strip().lower()
+        sender_addr = _extract_sender_address(e)
+
+        is_bounce = (
+            subject.startswith('undeliverable')
+            subject.startswith('delivery has failed')
+            or subject.startswith('returned mail')
+            or 'mailer-daemon' in sender_addr
+            or 'postmaster' in sender_addr
+        )
+
+        if not is_bounce:
+            filtered_emails.append(e)
+
+    bounce_count = len(emails) - len(filtered_emails)
+    if bounce_count > 0:
+        st.info(f'Hiding {bounce_count} bounce/undeliverable message(s)')
+
+    emails = filtered_emails
+
 
             if not emails:
                 st.success("✓ No candidate replies found (after filtering).")
