@@ -4480,28 +4480,27 @@ def main() -> None:
                 cand_email = interview.candidate_email
                 candidate_name = _ensure_candidate_name(interview.candidate_name, cand_email)
                 # Get current form values from session state (keys match form input keys)
-                hm_email = st.session_state.get("hm_email", "")
-                hm_name = st.session_state.get("hm_name", "")
-                rec_email = st.session_state.get("rec_email", "")
-                rec_name = st.session_state.get("rec_name", "")
-                role_title = st.session_state.get("role_title", "")
-                duration = int(st.session_state.get("duration_minutes", 60))
-                tz_name = st.session_state.get("tz_name", "UTC")
-                candidate_tz = st.session_state.get("candidate_timezone", tz_name)
-                is_teams = st.session_state.get("is_teams", True)
-                subject = st.session_state.get("subject", "")
-                agenda = st.session_state.get("agenda", "")
-                location = st.session_state.get("location", "")
-                include_recruiter = st.session_state.get("include_recruiter", True)
-                panel_interviewers = st.session_state.get("panel_interviewers", [])
+    # Load participant details from the persisted interview record (NOT session_state)
+    hm_email = getattr(interview, "hm_email", "") or ""
+    hm_name = getattr(interview, "hm_name", "") or ""
+    rec_email = getattr(interview, "rec_email", "") or ""
+    rec_name = getattr(interview, "rec_name", "") or ""
+    role_title = getattr(interview, "role_title", "") or ""
+    duration = int(getattr(interview, "duration_minutes", 60) or 60)
+    tz_name = getattr(interview, "timezone", "UTC") or "UTC"
+    candidate_tz = getattr(interview, "candidate_timezone", tz_name) or tz_name
+    is_teams = bool(getattr(interview, "is_teams", True))
+    subject = getattr(interview, "subject", "") or ""
+    agenda = getattr(interview, "agenda", "") or ""
+    location = getattr(interview, "location", "") or ""
+    include_recruiter = bool(getattr(interview, "include_recruiter", True))
+    panel_interviewers = getattr(interview, "panel_interviewers", []) or []
+
 
                 # Validate we have minimum required info
                 if not hm_email and not panel_interviewers:
                     st.error(f"Cannot auto-send to {cand_email}: Please set hiring manager email or panel interviewers in the New Scheduling Request tab first.")
                     return False
-
-                # Parse candidate name from email if possible
-                candidate_name = _ensure_candidate_name("", cand_email)
 
                 # Create the invite
                 result = _create_individual_invite(
