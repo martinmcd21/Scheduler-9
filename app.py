@@ -14,13 +14,6 @@ import fitz  # PyMuPDF
 from PIL import Image
 import streamlit as st
 
-# Scheduler mailbox address (used to ignore self-sent emails)
-SCHEDULER_MAILBOX = (
-    st.secrets.get("SCHEDULER_MAILBOX")
-    if hasattr(st, "secrets") and "SCHEDULER_MAILBOX" in st.secrets
-    else "scheduler@powerdashhr.com"
-).strip().lower()
-
 # --- Optional OpenAI (kept for PDF parsing flow) ---
 try:
     from openai import OpenAI
@@ -3146,8 +3139,7 @@ def _build_ics(
     *,
     organizer_email: str,
     organizer_name: str,
-    required_attendees: List[Tuple[str, str]],
-    optional_attendees: Optional[List[Tuple[str, str]]],
+    attendee_emails: List[str],
     summary: str,
     description: str,
     dtstart_utc: datetime,
@@ -3157,46 +3149,21 @@ def _build_ics(
     uid_hint: str,
     display_timezone: str = "UTC",
 ) -> bytes:
-    """Build an RFC 5545 meeting invite (ICS).
-
-    Important: Optional attendees (e.g., recruiter) must be included as ICS ATTENDEE
-    entries with ROLE=OPT-PARTICIPANT. Putting someone only in email CC does *not*
-    make them an optional attendee in the meeting.
-
-    Args:
-        organizer_email: Scheduler mailbox address.
-        organizer_name: Display name for organizer.
-        required_attendees: Required attendees as (email, name).
-        optional_attendees: Optional attendees as (email, name).
-        summary: Meeting subject.
-        description: Meeting description/agenda.
-        dtstart_utc: Start time in UTC.
-        dtend_utc: End time in UTC.
-        location: Location display string.
-        url: Join URL (Teams or other).
-        uid_hint: Stable seed for UID generation.
-        display_timezone: Used only for display elsewhere; not embedded in UTC ICS times.
-    """
-    # Keep UID stable across re-runs to avoid duplicate events in clients.
-    # Include all attendees in the UID seed so changes to attendee list produce a new UID.
-    required_emails = ",".join([e for (e, _) in (required_attendees or [])])
-    optional_emails = ",".join([e for (e, _) in (optional_attendees or [])]) if optional_attendees else ""
-    uid = stable_uid(uid_hint, organizer_email, required_emails, optional_emails, dtstart_utc.isoformat())
-
-    return create_ics_from_interview(
-        organizer_email=organizer_email,
-        organizer_name=organizer_name,
-        attendees=required_attendees or [],
-        optional_attendees=optional_attendees or [],
+    uid = stable_uid(uid_hint, organizer_email, ",".join(attendee_emails), dtstart_utc.isoformat())
+    inv = ICSInvite(
+        uid=uid,
+        dtstart_utc=dtstart_utc,
+        dtend_utc=dtend_utc,
         summary=summary,
         description=description,
-        start_utc=dtstart_utc,
-        end_utc=dtend_utc,
+        organizer_email=organizer_email,
+        organizer_name=organizer_name,
+        attendee_emails=attendee_emails,
         location=location,
-        join_url=url,
-        uid_seed=uid,
-        sequence=0,
+        url=url,
+        display_timezone=display_timezone,
     )
+    return inv.to_ics()
 
 
 # ----------------------------
@@ -6023,8 +5990,7 @@ def _create_individual_invite(
     ics_bytes = _build_ics(
         organizer_email=organizer_email,
         organizer_name=organizer_name,
-        required_attendees=attendees,
-        optional_attendees=cc_attendees,
+        attendee_emails=[a[0] for a in attendees],
         summary=effective_subject,
         description=agenda,
         dtstart_utc=start_utc,
@@ -6193,20 +6159,17 @@ def _create_individual_invite(
         all_recipient_emails = [a[0] for a in attendees]
         cc_recipient_emails = [a[0] for a in cc_attendees] if cc_attendees else []
         try:
-            import base64
-            client.send_mail(
+            client.send_meeting_invite(
                 subject=effective_subject,
-                body=body_html,
+                html_body=body_html,
+                ics_bytes=ics_bytes,
                 to_recipients=all_recipient_emails,
                 cc_recipients=cc_recipient_emails if cc_recipient_emails else None,
-                content_type="HTML",
-                attachment={
-                    "name": "invite.ics",
-                    "contentBytes": base64.b64encode(ics_bytes).decode("utf-8"),
-                    "contentType": "text/calendar; method=REQUEST",
-                },
+                organizer_name=organizer_name,
+                organizer_email=organizer_email,
             )
             log_structured(
+
                 LogLevel.INFO,
                 f"Sent meeting invitation email to {len(all_recipient_emails)} recipients",
                 action="send_invite_email",
@@ -6396,8 +6359,7 @@ def _create_group_invite(
     ics_bytes = _build_ics(
         organizer_email=organizer_email,
         organizer_name=organizer_name,
-        required_attendees=attendees,
-        optional_attendees=cc_attendees,
+        attendee_emails=[a[0] for a in attendees],
         summary=effective_subject,
         description=agenda,
         dtstart_utc=start_utc,
@@ -6558,20 +6520,17 @@ def _create_group_invite(
         all_recipient_emails = [a[0] for a in attendees]
         cc_recipient_emails = [a[0] for a in cc_attendees] if cc_attendees else []
         try:
-            import base64
-            client.send_mail(
+            client.send_meeting_invite(
                 subject=effective_subject,
-                body=body_html,
+                html_body=body_html,
+                ics_bytes=ics_bytes,
                 to_recipients=all_recipient_emails,
                 cc_recipients=cc_recipient_emails if cc_recipient_emails else None,
-                content_type="HTML",
-                attachment={
-                    "name": "invite.ics",
-                    "contentBytes": base64.b64encode(ics_bytes).decode("utf-8"),
-                    "contentType": "text/calendar; method=REQUEST",
-                },
+                organizer_name=organizer_name,
+                organizer_email=organizer_email,
             )
             log_structured(
+
                 LogLevel.INFO,
                 f"Sent group meeting invitation email to {len(all_recipient_emails)} recipients",
                 action="send_group_invite_email",
@@ -6749,8 +6708,7 @@ def _handle_create_invite(
     ics_bytes = _build_ics(
         organizer_email=organizer_email,
         organizer_name=organizer_name,
-        required_attendees=attendees,
-        optional_attendees=cc_attendees,
+        attendee_emails=[a[0] for a in attendees],
         summary=effective_subject,
         description=agenda,
         dtstart_utc=start_utc,
@@ -6817,8 +6775,7 @@ def _handle_create_invite(
             st.session_state["last_invite_ics_bytes"] = _build_ics(
                 organizer_email=organizer_email,
                 organizer_name=organizer_name,
-                required_attendees=attendees,
-                optional_attendees=cc_attendees,
+                attendee_emails=[a[0] for a in attendees],
                 summary=effective_subject,
                 description=agenda,
                 dtstart_utc=start_utc,
